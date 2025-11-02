@@ -1,79 +1,67 @@
-public class ThreadCheckArray implements Runnable 
-{
-	private boolean flag;
-	private boolean [] winArray;
-	SharedData sd;
-	int[] array;
-	int b;
-	
-	public ThreadCheckArray(SharedData sd) 
-	{
-		this.sd = sd;	
-		synchronized (sd) 
-		{
-			array = sd.getArray();
-			b = sd.getB();
-		}		
-		winArray = new boolean[array.length];
-	}
-	
-	void rec(int n, int b)
-	{
-		synchronized (sd) 
-		{
-			if (sd.getFlag())
-				return;
-		}	
-		if (n == 1)
-		{
-			if(b == 0 || b == array[n-1])
-			{
-				flag = true;
-				synchronized (sd) 
-				{
-					sd.setFlag(true);
-				}			
-			}
-			if (b == array[n-1])
-				winArray[n-1] = true;
-			return;
-		}
-		
-		rec(n-1, b - array[n-1]);
-		if (flag)
-			winArray[n-1] = true;
-		synchronized (sd) 
-		{
-			if (sd.getFlag())
-				return;
-		}	
-		rec(n-1, b);
-	}
+import java.util.ArrayList;
 
-	public void run() {
-		if (array.length != 1)
-			if (Thread.currentThread().getName().equals("thread1"))
-				rec(array.length-1, b - array[array.length - 1]);
-			else 
-				rec(array.length-1, b);
-		if (array.length == 1)
-			if (b == array[0] && !flag)
-			{
-				winArray[0] = true;
-				flag = true;
-				synchronized (sd) 
-				{
-					sd.setFlag(true);
-				}
-			}
-		if (flag)
-		{
-			if (Thread.currentThread().getName().equals("thread1"))
-				winArray[array.length - 1] = true;
-			synchronized (sd) 
-			{
-				sd.setWinArray(winArray);
-			}	
-		}
-	}
+public class ThreadCheckArray implements Runnable {
+    private SharedData sd;
+    private ArrayList<Integer> array;
+    private int b;
+    private boolean[] localWinArray;
+    private boolean found;
+
+    public ThreadCheckArray(SharedData sd) {
+        this.sd = sd;
+        this.array = sd.getArray();
+        this.b = sd.getB();
+        this.localWinArray = new boolean[array.size()];
+        this.found = false;
+    }
+
+    private void rec(int n, int sum) {
+        if (sd.getFlag()) return; // מישהו כבר מצא פתרון
+        if (n < 0) return;
+
+        if (sum == 0) {
+            found = true;
+            synchronized (sd) {
+                if (!sd.getFlag()) { // רק הראשון יעדכן
+                    sd.setFlag(true);
+                    sd.setWinArray(localWinArray.clone());
+                }
+            }
+            return;
+        }
+
+        if (n == 0) {
+            if (array.get(0) == sum) {
+                localWinArray[0] = true;
+                found = true;
+                synchronized (sd) {
+                    if (!sd.getFlag()) {
+                        sd.setFlag(true);
+                        sd.setWinArray(localWinArray.clone());
+                    }
+                }
+            }
+            return;
+        }
+
+        // כוללים את האיבר הנוכחי
+        localWinArray[n] = true;
+        rec(n - 1, sum - array.get(n));
+        if (found || sd.getFlag()) return;
+
+        // לא כוללים את האיבר הנוכחי
+        localWinArray[n] = false;
+        rec(n - 1, sum);
+    }
+
+    @Override
+    public void run() {
+        // thread אחד יתחיל לכלול את האיבר האחרון, והשני לא
+        if (Thread.currentThread().getName().equals("thread1")) {
+            localWinArray[array.size() - 1] = true;
+            rec(array.size() - 2, b - array.get(array.size() - 1));
+        } else {
+            rec(array.size() - 1, b);
+        }
+    }
 }
